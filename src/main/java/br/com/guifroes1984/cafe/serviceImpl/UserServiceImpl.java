@@ -1,7 +1,10 @@
 package br.com.guifroes1984.cafe.serviceImpl;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -12,12 +15,15 @@ import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 
 import br.com.guifroes1984.cafe.JWT.CustomerUsersDetailsService;
+import br.com.guifroes1984.cafe.JWT.JwtFilter;
 import br.com.guifroes1984.cafe.JWT.JwtUtil;
 import br.com.guifroes1984.cafe.POJO.User;
 import br.com.guifroes1984.cafe.contents.CafeConstants;
 import br.com.guifroes1984.cafe.dao.UserDao;
 import br.com.guifroes1984.cafe.service.UserService;
 import br.com.guifroes1984.cafe.utils.CafeUtils;
+import br.com.guifroes1984.cafe.utils.EmailUtils;
+import br.com.guifroes1984.cafe.wrapper.UserWrapper;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
@@ -35,6 +41,12 @@ public class UserServiceImpl implements UserService {
 	
 	@Autowired
 	JwtUtil jwtUtil;
+	
+	@Autowired
+	JwtFilter jwtFilter;
+	
+	@Autowired
+	EmailUtils emailUtils;
 
 	@Override
 	public ResponseEntity<String> signUp(Map<String, String> requestMap) {
@@ -101,5 +113,50 @@ public class UserServiceImpl implements UserService {
 	        return new ResponseEntity<String>("{\"message\":\"" + "Credenciais Incorretas." + "\"}",
 	                HttpStatus.BAD_REQUEST);
 	    }
+
+	@Override
+	public ResponseEntity<List<UserWrapper>> getAllUser() {
+		try {
+			if (jwtFilter.isAdmin()) {
+				return new ResponseEntity<>(userDao.getAllUser(), HttpStatus.OK);
+			} else {
+				return new ResponseEntity<>(new ArrayList<>(), HttpStatus.UNAUTHORIZED);
+			}
+		} catch (Exception ex) {
+			ex.printStackTrace();
+		}
+		return new ResponseEntity<>(new ArrayList<>(), HttpStatus.INTERNAL_SERVER_ERROR);
+	}
+
+	@Override
+	public ResponseEntity<String> update(Map<String, String> requestMap) {
+		try {
+			if (jwtFilter.isAdmin()) {
+				Optional<User> optional = userDao.findById(Integer.parseInt(requestMap.get("id")));
+				if (!optional.isEmpty()) {
+					userDao.updateStatus(requestMap.get("status"), Integer.parseInt(requestMap.get("id")));
+					sendMailToAllAdmin(requestMap.get("status"), optional.get().getEmail(), userDao.getAllAdmin());
+					return CafeUtils.getResponseEntity("Atualização de status do usuário com sucesso", HttpStatus.OK);
+				} else {
+					CafeUtils.getResponseEntity("ID do usuário não existe", HttpStatus.OK);
+				}
+			} else {
+				return CafeUtils.getResponseEntity(CafeConstants.ACESSO_NAO_AUTORIZADO, HttpStatus.UNAUTHORIZED);
+			}
+			
+		} catch (Exception ex) {
+			ex.printStackTrace();
+		}
+		return CafeUtils.getResponseEntity(CafeConstants.ALGO_DEU_ERRADO, HttpStatus.INTERNAL_SERVER_ERROR);
+	}
+
+	private void sendMailToAllAdmin(String status, String user, List<String> allAdmin) {
+		allAdmin.remove(jwtFilter.getCurrentUser());
+		if (status != null && status.equalsIgnoreCase("true")) {
+			emailUtils.sendSimpleMessage(jwtFilter.getCurrentUser(), "Conta aprovada", "DO UTILIZADOR:- " + user + " \n é aprovado por \nADMIN:-" + jwtFilter.getCurrentUser(), allAdmin);
+		} else {
+			emailUtils.sendSimpleMessage(jwtFilter.getCurrentUser(), "Conta desativada", "DO UTILIZADOR:- " + user + " \n é desativado por \nADMIN:-" + jwtFilter.getCurrentUser(), allAdmin);
+		}
+	}
 
 }
