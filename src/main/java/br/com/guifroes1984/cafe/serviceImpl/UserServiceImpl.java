@@ -14,6 +14,8 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 
+import com.google.common.base.Strings;
+
 import br.com.guifroes1984.cafe.JWT.CustomerUsersDetailsService;
 import br.com.guifroes1984.cafe.JWT.JwtFilter;
 import br.com.guifroes1984.cafe.JWT.JwtUtil;
@@ -157,6 +159,43 @@ public class UserServiceImpl implements UserService {
 		} else {
 			emailUtils.sendSimpleMessage(jwtFilter.getCurrentUser(), "Conta desativada", "DO UTILIZADOR:- " + user + " \n é desativado por \nADMIN:-" + jwtFilter.getCurrentUser(), allAdmin);
 		}
+	}
+
+	@Override
+	public ResponseEntity<String> checkToken() {
+		return CafeUtils.getResponseEntity("true", HttpStatus.OK);
+	}
+
+	@Override
+	public ResponseEntity<String> changePassword(Map<String, String> requestMap) {
+		try {
+			User userObj = userDao.findByEmail(jwtFilter.getCurrentUser());
+			if (!userObj.equals(null)) {
+				if (userObj.getPassword().equals(requestMap.get("oldPassword"))) {
+					userObj.setPassword(requestMap.get("newPassword"));
+					userDao.save(userObj);
+					return CafeUtils.getResponseEntity("Atualização de senha com sucesso", HttpStatus.OK);
+				}
+				return CafeUtils.getResponseEntity("Senha antiga incorreta", HttpStatus.BAD_REQUEST);
+			}
+			return CafeUtils.getResponseEntity(CafeConstants.ALGO_DEU_ERRADO, HttpStatus.INTERNAL_SERVER_ERROR);
+		} catch (Exception ex) {
+			ex.printStackTrace();
+		}
+		return CafeUtils.getResponseEntity(CafeConstants.ALGO_DEU_ERRADO, HttpStatus.INTERNAL_SERVER_ERROR);
+	}
+
+	@Override
+	public ResponseEntity<String> forgotPassword(Map<String, String> requestMap) {
+		try {
+			User user = userDao.findByEmail(requestMap.get("email"));
+			if (!Objects.isNull(user) && !Strings.isNullOrEmpty(user.getEmail()))
+				emailUtils.forgotMail(user.getEmail(), "Credenciais por sistema de gerenciamento de café", user.getPassword());
+			return CafeUtils.getResponseEntity("Verifique seu e-mail para credenciais", HttpStatus.OK);
+		} catch (Exception ex) {
+			ex.printStackTrace();
+		}
+		return CafeUtils.getResponseEntity(CafeConstants.ALGO_DEU_ERRADO, HttpStatus.INTERNAL_SERVER_ERROR);
 	}
 
 }
